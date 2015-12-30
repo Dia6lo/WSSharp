@@ -1,35 +1,23 @@
-﻿using System;
-using System.Net;
-using System.Net.Sockets;
+﻿using System.Threading.Tasks;
 
 namespace WSSharp
 {
-	public class WebSocketClient
+	public class WebSocketClient<TIncoming, TOutcoming>: 
+		WebSocketConnector<TIncoming, TOutcoming>
+		where TIncoming : class
+		where TOutcoming : class
 	{
-		private IPEndPoint endpoint;
-		private readonly IPAddress ipAddress;
-		private readonly int port;
-		private readonly ISocket socket;
-
-		public WebSocketClient(string location)
+		public WebSocketClient(string location, TIncoming handler) : base(location, handler) { }
+		
+		public async Task Connect(ConnectionDelegate<TIncoming, TOutcoming> onConnection)
 		{
-			var uri = new Uri(location);
-			ipAddress = Common.ParseIPAddress(uri);
-			port = uri.Port;
-			socket = new SocketWrapper(new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.IP));
+			await Socket.Connect(Endpoint, () => OnConnect(onConnection), e => Logger.Log("Listener socket is closed " + e));
 		}
 
-		public void Connect(Action<IWebSocketConnection> onConnection)
+		private void OnConnect(ConnectionDelegate<TIncoming, TOutcoming> onConnection)
 		{
-			endpoint = new IPEndPoint(ipAddress, port);
-			socket.Connect(endpoint, () => OnClientConnect(onConnection), e => Logger.Log("Listener socket is closed " + e));
-		}
-
-		private void OnClientConnect(Action<IWebSocketConnection> onConnection)
-		{
-			Logger.Log($"Connected to server on {endpoint} (actual port {port})");
-			var connection = new WebSocketConnection(socket, onConnection);
-			connection.StartReceiving();
+			Logger.Log($"Connected to server on {Endpoint} (actual port {Port})");
+			CreateConnection(Socket, onConnection);
 		}
 	}
 }

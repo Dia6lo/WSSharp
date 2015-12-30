@@ -1,53 +1,60 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace WSSharp
 {
-	public class WebSocketConnection : IWebSocketConnection
+	public class WebSocketConnection<TIncoming, TOutcoming>
+		where TIncoming: class 
+		where TOutcoming: class
 	{
 		private const int ReadSize = 1024 * 4;
-		private readonly ISocket socket;
+		private SocketWrapper socket;
+		private TIncoming handler;
+		private List<MethodInfo> incomingMethods;
+		private List<MethodInfo> outcomingMethods;
+		public TOutcoming Outcoming;
 
-		public WebSocketConnection(ISocket socket, Action<IWebSocketConnection> setup)
+		public WebSocketConnection(SocketWrapper socket, TIncoming handler)
 		{
+			this.handler = handler;
 			this.socket = socket;
-			setup(this);
+			incomingMethods = typeof(TIncoming).GetMethods()
+					  .Where(m => m.GetCustomAttributes(typeof(MethodContractAttribute)).Any())
+					  .ToList();
+			outcomingMethods = typeof(TOutcoming).GetMethods()
+					  .Where(m => m.GetCustomAttributes(typeof(MethodContractAttribute)).Any())
+					  .ToList();
+			if (incomingMethods.Count > 256)
+			{
+				throw new OutOfMemoryException("You can create not more than 256 MethodContract-attributed methods.");
+			}
+			GenerateOutcomingProxy();
 		}
 
-		public Action OnOpen { get; set; }
-		public Action OnClose { get; set; }
-		public Action<byte[]> OnMessage { get; set; }
-		public Action<Exception> OnError { get; set; }
 		public bool IsAvailable => socket.Connected;
 
-		public async Task StartReceiving()
+		private void GenerateOutcomingProxy()
+		{
+			Outcoming = Proxy<TOutcoming>.Create(Invoke);
+		}
+
+		private void Invoke(MethodInfo method)
+		{
+			
+			var message = new [] {(byte)outcomingMethods.IndexOf(method)};
+			socket.Send(message, null, null);
+		}
+
+		public void StartReceiving()
 		{
 			var data = new List<byte>(ReadSize);
 			var buffer = new byte[ReadSize];
-			await Read(data, buffer);
+			Read(data, buffer);
 		}
 
-		public async Task Send(byte[] message)
-		{
-			await socket.Send(message, () => {
-				Logger.Log("Sent " + message.Length + " bytes");
-			},
-				e => {
-					if (e is IOException)
-						Logger.Log("Failed to send. Disconnecting." + e);
-					else
-						Logger.Log("Failed to send. Disconnecting." + e);
-					CloseSocket();
-				});
-		}
-
-		public void Close()
-		{
-			throw new NotImplementedException();
-		}
 
 		private async Task Read(List<byte> data, byte[] buffer)
 		{
@@ -55,7 +62,8 @@ namespace WSSharp
 				return;
 
 			await socket.Receive(buffer, r => {
-				if (r <= 0) {
+				if (r <= 0)
+				{
 					Logger.Log("0 bytes read. Closing.");
 					CloseSocket();
 					return;
@@ -63,7 +71,8 @@ namespace WSSharp
 				Logger.Log(r + " bytes read");
 				var readBytes = buffer.Take(r).ToArray();
 				data.AddRange(readBytes);
-				OnMessage(readBytes);
+				var method = readBytes[0];
+				incomingMethods[method].Invoke(handler, null);
 				Read(data, buffer);
 			},
 				e => Logger.Log("There was an error reading bytes"));
@@ -71,7 +80,6 @@ namespace WSSharp
 
 		private void CloseSocket()
 		{
-			OnClose();
 			socket.Close();
 			socket.Dispose();
 		}

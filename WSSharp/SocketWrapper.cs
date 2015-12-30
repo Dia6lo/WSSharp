@@ -7,9 +7,8 @@ using System.Threading.Tasks;
 
 namespace WSSharp
 {
-	public class SocketWrapper : ISocket
+	public class SocketWrapper
 	{
-		private readonly Socket socket;
 		private Stream stream;
 		private readonly TaskFactory taskFactory;
 		private readonly CancellationTokenSource tokenSource;
@@ -18,16 +17,18 @@ namespace WSSharp
 		{
 			tokenSource = new CancellationTokenSource();
 			taskFactory = new TaskFactory(tokenSource.Token);
-			this.socket = socket;
-			if (this.socket.Connected)
-				stream = new NetworkStream(this.socket);
+			Socket = socket;
+			if (Socket.Connected)
+				stream = new NetworkStream(Socket);
 		}
 
-		private Stream Stream => stream = stream ?? new NetworkStream(socket);
+		public Socket Socket { get; }
+
+		private Stream Stream => stream = stream ?? new NetworkStream(Socket);
 
 		public void Listen(int backlog)
 		{
-			socket.Listen(backlog);
+			Socket.Listen(backlog);
 		}
 
 		public async Task Connect(EndPoint endPoint, Action onComplete, Action<Exception> onError)
@@ -35,7 +36,7 @@ namespace WSSharp
 			try {
 				var args = new SocketAsyncEventArgs { RemoteEndPoint = endPoint };
 				args.Completed += (sender, eventArgs) => onComplete();
-				await taskFactory.StartNew(() => socket.ConnectAsync(args));
+				await taskFactory.StartNew(() => Socket.ConnectAsync(args));
 			}
 			catch (Exception e) {
 				onError(e);
@@ -44,12 +45,13 @@ namespace WSSharp
 
 		public void Bind(EndPoint endPoint)
 		{
-			socket.Bind(endPoint);
+			Socket.Bind(endPoint);
 		}
 
-		public bool Connected => socket.Connected;
+		public bool Connected => Socket.Connected;
 
-		public async Task Receive(byte[] buffer, Action<int> onComplete, Action<Exception> onError, int offset)
+
+		public async Task Receive(byte[] buffer, Action<int> onComplete, Action<Exception> onError, int offset = 0)
 		{
 			try {
 				var count = await Stream.ReadAsync(buffer, 0, buffer.Length, tokenSource.Token);
@@ -60,13 +62,13 @@ namespace WSSharp
 			}
 		}
 
-		public async Task Accept(Action<ISocket> onComplete, Action<Exception> onError)
+		public async Task Accept(Action<SocketWrapper> onComplete, Action<Exception> onError)
 		{
 			try {
 				var args = new SocketAsyncEventArgs();
 				args.Completed += (sender, eventArgs) => 
 					onComplete(new SocketWrapper(eventArgs.AcceptSocket));
-				await taskFactory.StartNew(() => { socket.AcceptAsync(args); });
+				await taskFactory.StartNew(() => { Socket.AcceptAsync(args); });
 			}
 			catch (Exception e) {
 				onError(e);
@@ -82,7 +84,7 @@ namespace WSSharp
 		{
 			tokenSource.Cancel();
 			stream?.Close();
-			socket?.Close();
+			Socket?.Close();
 		}
 
 		public async Task Send(byte[] buffer, Action onComplete, Action<Exception> onError)

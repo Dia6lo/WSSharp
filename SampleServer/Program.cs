@@ -1,34 +1,26 @@
 ﻿using System;
 using System.Linq;
+using SampleCommonParts;
 using WSSharp;
 
 namespace SampleServer
 {
 	internal static class Program
 	{
+		private static Server serverHandler;
+
 		private static void Main(string[] args)
 		{
-			var server = new WebSocketServer("ws://127.0.0.1:8181");
+			serverHandler = new Server();
+			var server = new WebSocketServer<IServer, IClient>("ws://127.0.0.1:8181", serverHandler);
 			server.Start(OnConnection);
 			Console.ReadKey();
 		}
 
-		private static void OnConnection(IWebSocketConnection connection)
+		private static void OnConnection(WebSocketConnection<IServer, IClient> webSocketConnection)
 		{
-			connection.OnMessage = b => {
-				PrintArray(b, b.Length);
-				var data = Enumerable.Range(7, 10).Select(i => (byte) i).ToArray();
-				connection.Send(data);
-			};
-		}
-
-		private static void PrintArray(byte[] array, int count)
-		{
-			Console.Write("Array: ");
-			for (var i = 0; i < count; i++) {
-				Console.Write(array[i]);
-			}
-			Console.WriteLine();
+			webSocketConnection.Outcoming.DoClientStuff();
+			webSocketConnection.Outcoming.DoOtherClientStuff();
 		}
 	}
 }

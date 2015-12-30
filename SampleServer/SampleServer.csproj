@@ -41,8 +41,13 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Server.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\SampleCommonParts\SampleCommonParts.csproj">
+      <Project>{f7503e92-fec1-490a-8b22-18f92aa9713a}</Project>
+      <Name>SampleCommonParts</Name>
+    </ProjectReference>
     <ProjectReference Include="..\WSSharp\WSSharp.csproj">
       <Project>{BAE6BCEC-B7AA-431F-ADE1-232AE229BCE0}</Project>
       <Name>WSSharp</Name>

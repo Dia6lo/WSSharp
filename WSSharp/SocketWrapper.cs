@@ -30,21 +30,15 @@ namespace WSSharp
 			socket.Listen(backlog);
 		}
 
-		public Task Connect(EndPoint endPoint, Action callback, Action<Exception> error)
+		public async Task Connect(EndPoint endPoint, Action onComplete, Action<Exception> onError)
 		{
 			try {
-				Func<AsyncCallback, object, IAsyncResult> begin =
-					(cb, s) => socket.BeginConnect(endPoint, cb, s);
-
-				var task = Task.Factory.FromAsync(begin, socket.EndConnect, null);
-				task.ContinueWith(t => callback(), TaskContinuationOptions.NotOnFaulted)
-					.ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnFaulted);
-				task.ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnFaulted);
-				return task;
+				var args = new SocketAsyncEventArgs { RemoteEndPoint = endPoint };
+				args.Completed += (sender, eventArgs) => onComplete();
+				await taskFactory.StartNew(() => socket.ConnectAsync(args));
 			}
 			catch (Exception e) {
-				error(e);
-				return null;
+				onError(e);
 			}
 		}
 
@@ -55,35 +49,30 @@ namespace WSSharp
 
 		public bool Connected => socket.Connected;
 
-		public Task<int> Receive(byte[] buffer, Action<int> callback, Action<Exception> error, int offset)
+		public async Task Receive(byte[] buffer, Action<int> onComplete, Action<Exception> onError, int offset)
 		{
 			try {
-				Func<AsyncCallback, object, IAsyncResult> begin =
-					(cb, s) => Stream.BeginRead(buffer, offset, buffer.Length, cb, s);
-
-				var task = Task.Factory.FromAsync(begin, Stream.EndRead, null);
-				task.ContinueWith(t => callback(t.Result), TaskContinuationOptions.NotOnFaulted)
-					.ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnFaulted);
-				task.ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnFaulted);
-				return task;
+				var count = await Stream.ReadAsync(buffer, 0, buffer.Length, tokenSource.Token);
+				onComplete(count);
 			}
 			catch (Exception e) {
-				error(e);
-				return null;
+				onError(e);
 			}
 		}
 
-		public Task<ISocket> Accept(Action<ISocket> callback, Action<Exception> error)
+		public async Task Accept(Action<ISocket> onComplete, Action<Exception> onError)
 		{
-			Func<IAsyncResult, ISocket> end =
-				r => tokenSource.Token.IsCancellationRequested ? null : new SocketWrapper(socket.EndAccept(r));
-			var task = taskFactory.FromAsync(socket.BeginAccept, end, null);
-			task.ContinueWith(t => callback(t.Result), TaskContinuationOptions.OnlyOnRanToCompletion)
-				.ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnFaulted);
-			task.ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnFaulted);
-			return task;
+			try {
+				var args = new SocketAsyncEventArgs();
+				args.Completed += (sender, eventArgs) => 
+					onComplete(new SocketWrapper(eventArgs.AcceptSocket));
+				await taskFactory.StartNew(() => { socket.AcceptAsync(args); });
+			}
+			catch (Exception e) {
+				onError(e);
+			}
 		}
-
+		
 		public void Dispose()
 		{
 			Close();
@@ -96,25 +85,14 @@ namespace WSSharp
 			socket?.Close();
 		}
 
-		public Task Send(byte[] buffer, Action callback, Action<Exception> error)
+		public async Task Send(byte[] buffer, Action onComplete, Action<Exception> onError)
 		{
-			if (tokenSource.IsCancellationRequested)
-				return null;
-
 			try {
-				Func<AsyncCallback, object, IAsyncResult> begin =
-					(cb, s) => Stream.BeginWrite(buffer, 0, buffer.Length, cb, s);
-
-				var task = Task.Factory.FromAsync(begin, Stream.EndWrite, null);
-				task.ContinueWith(t => callback(), TaskContinuationOptions.NotOnFaulted)
-					.ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnFaulted);
-				task.ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnFaulted);
-
-				return task;
+				await Stream.WriteAsync(buffer, 0, buffer.Length, tokenSource.Token);
+				onComplete();
 			}
 			catch (Exception e) {
-				error(e);
-				return null;
+				onError(e);
 			}
 		}
 	}

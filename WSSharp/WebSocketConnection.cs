@@ -23,16 +23,16 @@ namespace WSSharp
 		public Action<Exception> OnError { get; set; }
 		public bool IsAvailable => socket.Connected;
 
-		public void StartReceiving()
+		public async Task StartReceiving()
 		{
 			var data = new List<byte>(ReadSize);
 			var buffer = new byte[ReadSize];
-			Read(data, buffer);
+			await Read(data, buffer);
 		}
 
-		public Task Send(byte[] message)
+		public async Task Send(byte[] message)
 		{
-			return socket.Send(message, () => {
+			await socket.Send(message, () => {
 				Logger.Log("Sent " + message.Length + " bytes");
 			},
 				e => {
@@ -49,12 +49,12 @@ namespace WSSharp
 			throw new NotImplementedException();
 		}
 
-		private void Read(List<byte> data, byte[] buffer)
+		private async Task Read(List<byte> data, byte[] buffer)
 		{
 			if (!IsAvailable)
 				return;
 
-			socket.Receive(buffer, r => {
+			await socket.Receive(buffer, r => {
 				if (r <= 0) {
 					Logger.Log("0 bytes read. Closing.");
 					CloseSocket();

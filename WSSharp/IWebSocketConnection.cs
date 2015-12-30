@@ -12,6 +12,6 @@ namespace WSSharp
 		bool IsAvailable { get; }
 		Task Send(byte[] message);
 		void Close();
-		void StartReceiving();
+		Task StartReceiving();
 	}
 }

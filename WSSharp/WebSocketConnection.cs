@@ -1,8 +1,11 @@
 ﻿using System;
+using System.CodeDom;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using ProtoBuf;
 
 namespace WSSharp
 {
@@ -10,14 +13,13 @@ namespace WSSharp
 		where TIncoming: class 
 		where TOutcoming: class
 	{
-		private const int ReadSize = 1024 * 4;
-		private SocketWrapper socket;
+		private WebSocket socket;
 		private TIncoming handler;
 		private List<MethodInfo> incomingMethods;
 		private List<MethodInfo> outcomingMethods;
 		public TOutcoming Outcoming;
 
-		public WebSocketConnection(SocketWrapper socket, TIncoming handler)
+		public WebSocketConnection(WebSocket socket, TIncoming handler)
 		{
 			this.handler = handler;
 			this.socket = socket;
@@ -31,57 +33,54 @@ namespace WSSharp
 			{
 				throw new OutOfMemoryException("You can create not more than 256 MethodContract-attributed methods.");
 			}
-			GenerateOutcomingProxy();
+			Outcoming = Proxy<TOutcoming>.Create(Invoke);
 		}
 
 		public bool IsAvailable => socket.Connected;
 
-		private void GenerateOutcomingProxy()
+		private object Invoke(MethodInfo method, object[] args)
 		{
-			Outcoming = Proxy<TOutcoming>.Create(Invoke);
-		}
-
-		private void Invoke(MethodInfo method)
-		{
-			
-			var message = new [] {(byte)outcomingMethods.IndexOf(method)};
-			socket.Send(message, null, null);
+			var argTypes = method.GetParameters().Select(t => t.ParameterType).ToArray();
+			var argPairs = args.Select((obj, i) => new {Obj = obj, Type = argTypes[i]});
+			socket.Stream.WriteByte((byte)outcomingMethods.IndexOf(method));
+			foreach (var arg in argPairs)
+			{
+				Serializer.SerializeWithLengthPrefix(socket.Stream, Convert.ChangeType(arg.Obj, arg.Type), PrefixStyle.Base128);
+			}
+			return null;
 		}
 
 		public void StartReceiving()
 		{
-			var data = new List<byte>(ReadSize);
-			var buffer = new byte[ReadSize];
-			Read(data, buffer);
+			Read();
 		}
 
-
-		private async Task Read(List<byte> data, byte[] buffer)
+		private async void Read()
 		{
-			if (!IsAvailable)
-				return;
-
-			await socket.Receive(buffer, r => {
-				if (r <= 0)
+			try
+			{
+				while (true)
 				{
-					Logger.Log("0 bytes read. Closing.");
-					CloseSocket();
-					return;
+					if (!IsAvailable)
+						return;
+					var methodIndex = await Task.Factory.StartNew(socket.Stream.ReadByte);
+					var method = incomingMethods[methodIndex];
+					var argTypes = method.GetParameters().Select(t => t.ParameterType).ToArray();
+					var args = new List<object>();
+					foreach (var argType in argTypes)
+					{
+						var deserializer = typeof(Serializer)
+							.GetMethod("DeserializeWithLengthPrefix", new []{ typeof(Stream), typeof(PrefixStyle)})
+							.MakeGenericMethod(argType);
+						args.Add(deserializer.Invoke(null, new object[] {socket.Stream, PrefixStyle.Base128}));
+					}
+					method.Invoke(handler, args.ToArray());
 				}
-				Logger.Log(r + " bytes read");
-				var readBytes = buffer.Take(r).ToArray();
-				data.AddRange(readBytes);
-				var method = readBytes[0];
-				incomingMethods[method].Invoke(handler, null);
-				Read(data, buffer);
-			},
-				e => Logger.Log("There was an error reading bytes"));
-		}
-
-		private void CloseSocket()
-		{
-			socket.Close();
-			socket.Dispose();
+			}
+			finally
+			{
+				socket.Dispose();
+			}
 		}
 	}
 }

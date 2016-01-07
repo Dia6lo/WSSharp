@@ -27,6 +27,12 @@ namespace SampleClient
 		private static void OnConnection(WebSocketConnection<IClient, IServer> webSocketConnection)
 		{
 			webSocketConnection.Outcoming.DoServerStuff();
+			var person = new Person
+			{
+				Name = "Andrew",
+				Age = 20
+			};
+			webSocketConnection.Outcoming.DisplayStuff(person);
 		}
 	}
 }

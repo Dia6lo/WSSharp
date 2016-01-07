@@ -7,15 +7,15 @@ namespace WSSharp
 {
 	public class Proxy<T> : RealProxy
 	{
-		private readonly Action<MethodInfo> onInvocation;
+		private readonly Func<MethodInfo, object[], object> onInvocation;
 
-		private Proxy(Action<MethodInfo> onInvocation)
+		private Proxy(Func<MethodInfo, object[], object> onInvocation)
 			: base(typeof(T))
 		{
 			this.onInvocation = onInvocation;
 		}
 
-		public static T Create(Action<MethodInfo> onInvocation)
+		public static T Create(Func<MethodInfo, object[], object> onInvocation)
 		{
 			return (T)new Proxy<T>(onInvocation).GetTransparentProxy();
 		}
@@ -27,8 +27,8 @@ namespace WSSharp
 
 			try
 			{
-				onInvocation(method);
-				return new ReturnMessage(null, null, 0, methodCall.LogicalCallContext, methodCall);
+				var result = onInvocation(method, methodCall.Args);
+				return new ReturnMessage(result, null, 0, methodCall.LogicalCallContext, methodCall);
 			}
 			catch (Exception e)
 			{

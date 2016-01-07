@@ -12,7 +12,7 @@ namespace WSSharp
 		protected readonly IPAddress IPAddress;
 		protected readonly int Port;
 		protected readonly IPEndPoint Endpoint;
-		protected readonly SocketWrapper Socket;
+		protected readonly WebSocket Socket;
 
 		protected WebSocketConnector(string location, TIncoming handler)
 		{
@@ -21,14 +21,14 @@ namespace WSSharp
 			IPAddress = ParseIPAddress(uri);
 			Port = uri.Port;
 			Endpoint = new IPEndPoint(IPAddress, Port);
-			Socket = new SocketWrapper(new Socket(IPAddress.AddressFamily, SocketType.Stream, ProtocolType.IP));
+			Socket = new WebSocket(new Socket(IPAddress.AddressFamily, SocketType.Stream, ProtocolType.IP));
 		}
 
-		protected void CreateConnection(SocketWrapper socket, ConnectionDelegate<TIncoming, TOutcoming> onConnection)
+		protected void CreateConnection(WebSocket socket, ConnectionDelegate<TIncoming, TOutcoming> onConnection)
 		{
 			var connection = new WebSocketConnection<TIncoming, TOutcoming>(socket, Handler);
 			connection.StartReceiving();
-			onConnection(connection);
+			onConnection?.Invoke(connection);
 		}
 
 		private static IPAddress ParseIPAddress(Uri uri)

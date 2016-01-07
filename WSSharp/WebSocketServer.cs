@@ -22,7 +22,7 @@
 				e => Logger.Log("Listener socket is closed " + e));
 		}
 
-		private void OnConnect(SocketWrapper clientSocket, ConnectionDelegate<TIncoming, TOutcoming> onConnection)
+		private void OnConnect(WebSocket clientSocket, ConnectionDelegate<TIncoming, TOutcoming> onConnection)
 		{
 			Logger.Log("Client connected.");
 			CreateConnection(clientSocket, onConnection);

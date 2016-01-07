@@ -6,5 +6,8 @@ namespace SampleCommonParts
 	{
 		[MethodContract]
 		void DoServerStuff();
+
+		[MethodContract]
+		void DisplayStuff(Person stuff);
 	}
 }

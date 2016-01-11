@@ -1,7 +1,5 @@
 ﻿using System;
-using System.CodeDom;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -10,7 +8,7 @@ using ProtoBuf;
 namespace WSSharp
 {
 	public class WebSocketConnection<TIncoming, TOutcoming>
-		where TIncoming: class 
+		where TIncoming: class
 		where TOutcoming: class
 	{
 		private WebSocket socket;
@@ -45,7 +43,7 @@ namespace WSSharp
 			socket.Stream.WriteByte((byte)outcomingMethods.IndexOf(method));
 			foreach (var arg in argPairs)
 			{
-				Serializer.SerializeWithLengthPrefix(socket.Stream, Convert.ChangeType(arg.Obj, arg.Type), PrefixStyle.Base128);
+				Serializer.NonGeneric.SerializeWithLengthPrefix(socket.Stream, Convert.ChangeType(arg.Obj, arg.Type), PrefixStyle.Base128, 1);
 			}
 			return null;
 		}
@@ -69,10 +67,9 @@ namespace WSSharp
 					var args = new List<object>();
 					foreach (var argType in argTypes)
 					{
-						var deserializer = typeof(Serializer)
-							.GetMethod("DeserializeWithLengthPrefix", new []{ typeof(Stream), typeof(PrefixStyle)})
-							.MakeGenericMethod(argType);
-						args.Add(deserializer.Invoke(null, new object[] {socket.Stream, PrefixStyle.Base128}));
+						object obj;
+						Serializer.NonGeneric.TryDeserializeWithLengthPrefix(socket.Stream, PrefixStyle.Base128, _ => argType, out obj);
+						args.Add(obj);
 					}
 					method.Invoke(handler, args.ToArray());
 				}
